@@ -140,12 +140,11 @@ def initialize_gemini():
         ]
         
         candidate_models = [
-            'gemini-2.0-flash-exp',      # 15 RPM, 1500 RPD - 最優先
-            'gemini-flash-latest',        # 通常10-15 RPM
-            'gemini-2.5-flash',          # 10 RPM, 250 RPD
-            'gemini-pro-latest',
-            'gemini-pro'                  # 避ける（5 RPM, 25 RPDのみ）
-        ]
+    'gemini-3.1-flash-lite-preview',  # Googleが推奨する移行先 - 最優先
+    'gemini-2.5-flash',               # 安定版・高性能（2.0廃止後の保険）
+    'gemini-3-flash-preview',         # 最新フロンティア級（preview）
+    'gemini-2.5-pro',                 # 高性能だが低RPM - 避ける
+]
         
         model_name = None
         for candidate in candidate_models:
