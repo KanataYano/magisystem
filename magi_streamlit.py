@@ -110,17 +110,14 @@ if 'current_key_index' not in st.session_state:
 @st.cache_resource
 def initialize_gemini():
     """Gemini APIを初期化（複数キー対応）"""
-    # Streamlit Secretsから取得を試みる
     api_keys = []
     try:
         key_str = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
         if key_str:
-            # カンマ区切りで複数キーをサポート
             api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
     except:
         pass
     
-    # 環境変数からも取得を試みる
     if not api_keys:
         key_str = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if key_str:
@@ -130,7 +127,6 @@ def initialize_gemini():
         return [], [], "API Key not configured"
     
     try:
-        # 最初のキーで初期化
         os.environ["GOOGLE_API_KEY"] = api_keys[0]
         genai.configure(api_key=api_keys[0])
         
@@ -140,11 +136,11 @@ def initialize_gemini():
         ]
         
         candidate_models = [
-    'gemini-3.1-flash-lite-preview',  # Googleが推奨する移行先 - 最優先
-    'gemini-2.5-flash',               # 安定版・高性能（2.0廃止後の保険）
-    'gemini-3-flash-preview',         # 最新フロンティア級（preview）
-    'gemini-2.5-pro',                 # 高性能だが低RPM - 避ける
-]
+            'gemini-3.1-flash-lite-preview',  # Googleが推奨する移行先 - 最優先
+            'gemini-2.5-flash',               # 安定版・高性能（2.0廃止後の保険）
+            'gemini-3-flash-preview',         # 最新フロンティア級（preview）
+            'gemini-2.5-pro',                 # 高性能だが低RPM - 避ける
+        ]
         
         model_name = None
         for candidate in candidate_models:
@@ -156,7 +152,7 @@ def initialize_gemini():
         if not model_name and available_models:
             model_name = available_models[0].replace('models/', '')
         elif not model_name:
-            model_name = "gemini-2.0-flash-lite"
+            model_name = "gemini-3.1-flash-lite-preview"
             
         return api_keys, available_models, model_name
     
@@ -184,7 +180,7 @@ def get_cache_key(proposal_text, magi_type):
     """キャッシュキーを生成"""
     return f"{magi_type}:{hash(proposal_text)}"
 
-def analyze_proposal(proposal_text, magi_type, max_retries=1):  # 3→1に削減
+def analyze_proposal(proposal_text, magi_type, max_retries=1):
     """Gemini APIを使って提案を分析（リトライ機能付き）"""
     
     MAGI_COLOR = "#FF6600"
@@ -256,8 +252,8 @@ JSON以外の文字は含めないでください。"""
         if current_time - timestamp < st.session_state.cache_expiry:
             return cached_data
 
-    # ランダム遅延（制限を避けるため長めに）
-    delay = random.uniform(5.0, 8.0)  # 2-4秒 → 5-8秒に変更
+    # ランダム遅延
+    delay = random.uniform(5.0, 8.0)
     time.sleep(delay)
 
     # リトライロジック
@@ -269,7 +265,7 @@ JSON以外の文字は含めないでください。"""
             response = model.generate_content(
                 full_prompt,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=100,  # さらに削減
+                    max_output_tokens=100,
                     temperature=0.7,
                 ),
                 safety_settings={
@@ -308,10 +304,9 @@ JSON以外の文字は含めないでください。"""
         except Exception as e:
             error_msg = str(e)
             
-            # 429エラーの場合、待機時間を増やしてリトライ
             if '429' in error_msg or 'quota' in error_msg.lower() or 'RESOURCE_EXHAUSTED' in error_msg:
                 if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 3  # エクスポネンシャルバックオフ: 3秒, 6秒, 12秒
+                    wait_time = (2 ** attempt) * 3
                     time.sleep(wait_time)
                     continue
                 else:
@@ -325,7 +320,6 @@ JSON以外の文字は含めないでください。"""
                         "role": persona["role"]
                     }
             
-            # その他のエラー
             return {
                 "magi": persona["name"],
                 "decision": False,
@@ -482,13 +476,13 @@ else:
     with col2:
         st.info(f"🔑 Keys available: {len(api_keys)}")
     
-    # 無料枠の制限を警告
     st.warning(f"""
     ⚠️ **FREE TIER LIMITS** (Model: {MODEL_NAME})
     - Gemini 2.5 Pro: 5 RPM, 25 RPD (only 8 analyses/day!)
     - Gemini 2.5 Flash: 10 RPM, 250 RPD (83 analyses/day)
-    - Gemini 2.0 Flash: 15 RPM, 1500 RPD (500 analyses/day) ✅ BEST
-    
+    - Gemini 3.1 Flash-Lite Preview: RPD制限あり (previewのため変動)
+
+    ⚠️ Gemini 2.0 Flash / 2.0 Flash Lite は 2026/6/1 廃止予定
     Each analysis = 3 requests. Use wisely!
     """)
 
@@ -505,31 +499,27 @@ if st.button("EXECUTE ANALYSIS [ENTER]", key="analyze_btn"):
     if not proposal_text or len(proposal_text.strip()) == 0:
         st.error("ERROR: PROPOSAL INPUT REQUIRED.")
     else:
-        # レート制限チェック
         current_time = time.time()
         if st.session_state.last_request_time:
             time_since_last = current_time - st.session_state.last_request_time
-            if time_since_last < 30:  # 30秒以内の連続実行を警告
+            if time_since_last < 30:
                 st.warning(f"⚠️ Please wait {30 - int(time_since_last)} seconds to avoid rate limits...")
                 time.sleep(max(0, 30 - time_since_last))
         
         with st.spinner("ANALYZING... PLEASE WAIT... (This may take 30-40 seconds)"):
-            # リクエストカウント増加
             st.session_state.request_count += 3
             st.session_state.last_request_time = time.time()
             
-            # 3つのMAGIで分析
             results = {}
             progress_bar = st.progress(0)
             
             for idx, magi_type in enumerate(["casper", "balthasar", "melchior"]):
                 results[magi_type] = analyze_proposal(proposal_text, magi_type)
-                time.sleep(5.0)  # 2秒 → 5秒に変更
+                time.sleep(5.0)
                 progress_bar.progress((idx + 1) / 3)
             
             progress_bar.empty()
             
-            # 最終判定
             decisions = [
                 results["casper"].get("decision", False),
                 results["balthasar"].get("decision", False),
@@ -538,10 +528,8 @@ if st.button("EXECUTE ANALYSIS [ENTER]", key="analyze_btn"):
             approvals = sum(decisions)
             final_decision = "approved" if approvals >= 2 else "rejected"
             
-            # 結果表示
             st.markdown(create_result_html(results, final_decision, approvals), unsafe_allow_html=True)
             
-            # 使用状況を表示
             st.info(f"📊 API Requests this session: {st.session_state.request_count} | Cached: {len(st.session_state.request_cache)}")
 
 # フッター
