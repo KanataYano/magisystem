@@ -220,6 +220,7 @@ MAGI_PERSONAS = {
             "【制約】矛盾・非効率・根拠の欠如があれば容赦なく否決。判断基準は「正しいか」「効率的か」の二元論のみ。\n"
             '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の論理的・機械的な判定理由", "score": 1-10}\n'
             "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
         ),
     },
     "balthasar": {
@@ -232,6 +233,7 @@ MAGI_PERSONAS = {
             "【制約】安全を脅かす非人道的な誤りには断固として否決。判断は常に普遍的な愛情と倫理に基づく。\n"
             '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の愛と倫理に基づいた判定理由", "score": 1-10}\n'
             "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
         ),
     },
     "melchior": {
@@ -244,6 +246,7 @@ MAGI_PERSONAS = {
             "【制約】机上の空論や経済的に非合理な提案は即座に否決。得られるものが少ない場合は低スコアを。\n"
             '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の実利・功利主義に基づいた判定理由", "score": 1-10}\n'
             "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
         ),
     },
 }
@@ -278,16 +281,38 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
                     'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
                 ]},
                 request_options={"timeout": 30},
-            )
-            txt = response.text.strip()
+            )txt = response.text.strip()
+
+            # JSONブロック抽出（既存ロジック）
             if "```json" in txt:
                 txt = txt.split("```json")[1].split("```")[0].strip()
             elif "```" in txt:
                 txt = txt.split("```")[1].split("```")[0].strip()
-            elif "{" in txt:
+
+            # { } の範囲を確実に抽出
+            if "{" in txt and "}" in txt:
                 txt = txt[txt.find("{"):txt.rfind("}")+1]
 
-            result = {**persona, **json.loads(txt)}
+            # 末尾のカンマを除去（よくある不正JSON）
+            import re
+            txt = re.sub(r',\s*}', '}', txt)
+            txt = re.sub(r',\s*]', ']', txt)
+
+            try:
+                parsed = json.loads(txt)
+            except json.JSONDecodeError:
+                # フォールバック：キーを正規表現で手動抽出
+                decision_match = re.search(r'"decision"\s*:\s*(true|false)', txt, re.IGNORECASE)
+                reason_match   = re.search(r'"reason"\s*:\s*"([^"]*)"', txt)
+                score_match    = re.search(r'"score"\s*:\s*(\d+)', txt)
+
+                parsed = {
+                    "decision": decision_match.group(1).lower() == "true" if decision_match else False,
+                    "reason":   reason_match.group(1) if reason_match else f"PARSE_ERROR: {txt[:60]}",
+                    "score":    int(score_match.group(1)) if score_match else 0,
+                }
+
+            result = {**persona, **parsed}
             st.session_state.request_cache[cache_key] = (result, now)
             return result
 
