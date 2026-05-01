@@ -135,24 +135,26 @@ def initialize_gemini():
             if 'generateContent' in m.supported_generation_methods
         ]
         
+        # ★修正1: 安定版を最優先。previewモデルは503が多いので後回し
         candidate_models = [
-            'gemini-3.1-flash-lite-preview',  # Googleが推奨する移行先 - 最優先
-            'gemini-2.5-flash',               # 安定版・高性能（2.0廃止後の保険）
-            'gemini-3-flash-preview',         # 最新フロンティア級（preview）
-            'gemini-2.5-pro',                 # 高性能だが低RPM - 避ける
+            'gemini-2.5-flash',               # 安定・高性能・250RPD → 最優先
+            'gemini-2.0-flash',               # 廃止予定(6/1)だがまだ使える保険
+            'gemini-2.5-flash-preview-05-20', # 最新previewフォールバック
+            'gemini-2.5-pro',                 # 低RPM(5)なので最後の手段
         ]
         
         model_name = None
         for candidate in candidate_models:
-            full_name = f"models/{candidate}" if not candidate.startswith('models/') else candidate
+            full_name = f"models/{candidate}"
             if full_name in available_models or candidate in available_models:
                 model_name = candidate
                 break
         
         if not model_name and available_models:
+            # フォールバック: 利用可能な最初のモデル
             model_name = available_models[0].replace('models/', '')
         elif not model_name:
-            model_name = "gemini-3.1-flash-lite-preview"
+            model_name = "gemini-2.5-flash"
             
         return api_keys, available_models, model_name
     
@@ -180,7 +182,7 @@ def get_cache_key(proposal_text, magi_type):
     """キャッシュキーを生成"""
     return f"{magi_type}:{hash(proposal_text)}"
 
-def analyze_proposal(proposal_text, magi_type, max_retries=1):
+def analyze_proposal(proposal_text, magi_type, max_retries=3):
     """Gemini APIを使って提案を分析（リトライ機能付き）"""
     
     MAGI_COLOR = "#FF6600"
@@ -252,8 +254,8 @@ JSON以外の文字は含めないでください。"""
         if current_time - timestamp < st.session_state.cache_expiry:
             return cached_data
 
-    # ランダム遅延
-    delay = random.uniform(5.0, 8.0)
+    # ★修正2: 遅延を短縮（5-8秒→2-4秒）
+    delay = random.uniform(2.0, 4.0)
     time.sleep(delay)
 
     # リトライロジック
@@ -262,10 +264,11 @@ JSON以外の文字は含めないでください。"""
             model = genai.GenerativeModel(MODEL_NAME)
             full_prompt = f"{persona['prompt']}\n\n提案内容: {proposal_text}"
             
+            # ★修正3: request_options でタイムアウトを30秒に設定
             response = model.generate_content(
                 full_prompt,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=100,
+                    max_output_tokens=200,
                     temperature=0.7,
                 ),
                 safety_settings={
@@ -273,7 +276,8 @@ JSON以外の文字は含めないでください。"""
                     'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
                     'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
                     'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-                }
+                },
+                request_options={"timeout": 30}  # ★30秒タイムアウト
             )
             
             response_text = response.text.strip()
@@ -304,26 +308,46 @@ JSON以外の文字は含めないでください。"""
         except Exception as e:
             error_msg = str(e)
             
+            # 429 / quota超過 → キーローテーション後リトライ
             if '429' in error_msg or 'quota' in error_msg.lower() or 'RESOURCE_EXHAUSTED' in error_msg:
+                rotated = rotate_api_key()
                 if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 3
+                    wait_time = (2 ** attempt) * 5
                     time.sleep(wait_time)
                     continue
                 else:
                     return {
                         "magi": persona["name"],
                         "decision": False,
-                        "reason": "ERROR: 429 QUOTA EXCEEDED. PLEASE WAIT A FEW MINUTES OR GET A NEW KEY",
+                        "reason": "ERROR: QUOTA EXCEEDED. WAIT A FEW MINUTES OR ADD MORE KEYS.",
                         "score": 0,
                         "icon": persona["icon"],
                         "color": persona["color"],
                         "role": persona["role"]
                     }
             
+            # 503 / タイムアウト → 短い待機後リトライ
+            if '503' in error_msg or 'timeout' in error_msg.lower() or 'unavailable' in error_msg.lower():
+                if attempt < max_retries - 1:
+                    wait_time = 3 * (attempt + 1)
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    return {
+                        "magi": persona["name"],
+                        "decision": False,
+                        "reason": f"ERROR: SERVICE UNAVAILABLE (503). MODEL MAY BE OVERLOADED.",
+                        "score": 0,
+                        "icon": persona["icon"],
+                        "color": persona["color"],
+                        "role": persona["role"]
+                    }
+            
+            # その他のエラー
             return {
                 "magi": persona["name"],
                 "decision": False,
-                "reason": f"ERROR: {str(e)[:50]}",
+                "reason": f"ERROR: {str(e)[:80]}",
                 "score": 0,
                 "icon": persona["icon"],
                 "color": persona["color"],
@@ -447,7 +471,7 @@ def create_result_html(results, final_decision, approvals):
     return html
 
 # UI
-st.markdown("""
+st.markdown(f"""
 <div class="title-box">
     <h1 style="margin: 0; font-size: 28px; letter-spacing: 3px;">MAGI SYSTEM V3.1</h1>
     <p class="status-text" style="margin: 5px 0 0 0;">COMMAND: INITIALIZE DECISION-SUPPORT INTERFACE</p>
@@ -476,14 +500,20 @@ else:
     with col2:
         st.info(f"🔑 Keys available: {len(api_keys)}")
     
+    # ★修正4: モデルに応じた正確な制限表示
+    limits_info = {
+        "gemini-2.5-flash": "10 RPM, 250 RPD → 1日83回分析可能",
+        "gemini-2.5-pro": "5 RPM, 25 RPD → 1日8回分析のみ（非推奨）",
+        "gemini-2.0-flash": "15 RPM, 1500 RPD → ★2026/6/1廃止予定",
+    }
+    limit_text = limits_info.get(MODEL_NAME, "制限情報不明（previewモデルは不安定な場合あり）")
+    
     st.warning(f"""
-    ⚠️ **FREE TIER LIMITS** (Model: {MODEL_NAME})
-    - Gemini 2.5 Pro: 5 RPM, 25 RPD (only 8 analyses/day!)
-    - Gemini 2.5 Flash: 10 RPM, 250 RPD (83 analyses/day)
-    - Gemini 3.1 Flash-Lite Preview: RPD制限あり (previewのため変動)
-
-    ⚠️ Gemini 2.0 Flash / 2.0 Flash Lite は 2026/6/1 廃止予定
-    Each analysis = 3 requests. Use wisely!
+    ⚠️ **FREE TIER LIMITS** (使用中モデル: `{MODEL_NAME}`)
+    - {limit_text}
+    - 1回の分析 = 3リクエスト消費
+    
+    503エラーが出た場合はモデルが混雑中。しばらく待ってから再試行してください。
     """)
 
 # 入力エリア
@@ -502,11 +532,12 @@ if st.button("EXECUTE ANALYSIS [ENTER]", key="analyze_btn"):
         current_time = time.time()
         if st.session_state.last_request_time:
             time_since_last = current_time - st.session_state.last_request_time
-            if time_since_last < 30:
-                st.warning(f"⚠️ Please wait {30 - int(time_since_last)} seconds to avoid rate limits...")
-                time.sleep(max(0, 30 - time_since_last))
+            if time_since_last < 15:  # ★修正5: 待機時間を30秒→15秒に短縮
+                remaining = int(15 - time_since_last)
+                st.warning(f"⚠️ レート制限回避のため {remaining} 秒待機中...")
+                time.sleep(max(0, 15 - time_since_last))
         
-        with st.spinner("ANALYZING... PLEASE WAIT... (This may take 30-40 seconds)"):
+        with st.spinner("ANALYZING... PLEASE WAIT... (30秒前後かかります)"):
             st.session_state.request_count += 3
             st.session_state.last_request_time = time.time()
             
@@ -515,7 +546,8 @@ if st.button("EXECUTE ANALYSIS [ENTER]", key="analyze_btn"):
             
             for idx, magi_type in enumerate(["casper", "balthasar", "melchior"]):
                 results[magi_type] = analyze_proposal(proposal_text, magi_type)
-                time.sleep(5.0)
+                if idx < 2:  # 最後のリクエスト後は待機不要
+                    time.sleep(3.0)  # ★修正6: インター待機も短縮
                 progress_bar.progress((idx + 1) / 3)
             
             progress_bar.empty()
