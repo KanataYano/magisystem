@@ -271,7 +271,7 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
     time.sleep(random.uniform(2.0, 3.5))
 
     for attempt in range(max_retries):
-try:
+        try:
             model = genai.GenerativeModel(MODEL_NAME)
             response = model.generate_content(
                 f"{persona['prompt']}\n\n提案内容: {proposal_text}",
