@@ -271,7 +271,7 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
     time.sleep(random.uniform(2.0, 3.5))
 
     for attempt in range(max_retries):
-        try:
+try:
             model = genai.GenerativeModel(MODEL_NAME)
             response = model.generate_content(
                 f"{persona['prompt']}\n\n提案内容: {proposal_text}",
@@ -281,9 +281,10 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
                     'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
                 ]},
                 request_options={"timeout": 30},
-            )txt = response.text.strip()
+            )
+            txt = response.text.strip()
 
-            # JSONブロック抽出（既存ロジック）
+            # JSONブロック抽出
             if "```json" in txt:
                 txt = txt.split("```json")[1].split("```")[0].strip()
             elif "```" in txt:
@@ -293,19 +294,17 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
             if "{" in txt and "}" in txt:
                 txt = txt[txt.find("{"):txt.rfind("}")+1]
 
-            # 末尾のカンマを除去（よくある不正JSON）
-            import re
+            # 末尾カンマを除去（不正JSON対策）
             txt = re.sub(r',\s*}', '}', txt)
             txt = re.sub(r',\s*]', ']', txt)
 
             try:
                 parsed = json.loads(txt)
             except json.JSONDecodeError:
-                # フォールバック：キーを正規表現で手動抽出
+                # フォールバック：正規表現で手動抽出
                 decision_match = re.search(r'"decision"\s*:\s*(true|false)', txt, re.IGNORECASE)
                 reason_match   = re.search(r'"reason"\s*:\s*"([^"]*)"', txt)
                 score_match    = re.search(r'"score"\s*:\s*(\d+)', txt)
-
                 parsed = {
                     "decision": decision_match.group(1).lower() == "true" if decision_match else False,
                     "reason":   reason_match.group(1) if reason_match else f"PARSE_ERROR: {txt[:60]}",
@@ -330,9 +329,6 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
                     continue
                 return {**persona, "decision": False, "reason": "ERROR: SERVICE UNAVAILABLE (503).", "score": 0}
             return {**persona, "decision": False, "reason": f"ERROR: {err[:80]}", "score": 0}
-
-    return {**persona, "decision": False, "reason": "ERROR: MAX RETRIES EXCEEDED.", "score": 0}
-
 
 # ─────────────────────────────────────────
 # 結果HTML生成（EVAシネマティックUI）
