@@ -175,8 +175,8 @@ def initialize_gemini():
             if 'generateContent' in m.supported_generation_methods
         ]
         candidates = [
-            'gemini-2.5-flash',
             'gemini-2.0-flash',
+            'gemini-2.5-flash',
             'gemini-2.5-flash-preview-05-20',
             'gemini-2.5-pro',
         ]
