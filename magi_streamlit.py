@@ -275,14 +275,17 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
             model = genai.GenerativeModel(MODEL_NAME)
             response = model.generate_content(
                 f"{persona['prompt']}\n\n提案内容: {proposal_text}",
-                generation_config=genai.types.GenerationConfig(max_output_tokens=512, temperature=0.7),
+                generation_config=genai.types.GenerationConfig(max_output_tokens=1024, temperature=0.7),
                 safety_settings={cat: 'BLOCK_NONE' for cat in [
                     'HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH',
                     'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
                 ]},
-                request_options={"timeout": 30},
+                request_options={"timeout": 60},
+                stream=False,
             )
             txt = response.text.strip()
+                txt += part.text
+            txt = txt.strip()
 
             # JSONブロック抽出
             if "```json" in txt:
