@@ -4,7 +4,7 @@ import streamlit as st
 import json
 import time
 import random
-
+import re
 st.set_page_config(
     page_title="MAGI SYSTEM V3.1",
     page_icon="🔶",
