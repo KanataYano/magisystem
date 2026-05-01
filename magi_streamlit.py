@@ -283,7 +283,7 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
                 request_options={"timeout": 60},
                 stream=False,
             )
-            txt = response.text.strip()
+            for part in response.parts:
                 txt += part.text
             txt = txt.strip()
 
