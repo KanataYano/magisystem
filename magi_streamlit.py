@@ -5,7 +5,6 @@ import json
 import time
 import random
 
-# ページ設定
 st.set_page_config(
     page_title="MAGI SYSTEM V3.1",
     page_icon="🔶",
@@ -13,562 +12,499 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# カスタムCSS
+# ─────────────────────────────────────────
+# GLOBAL CSS / EVA VISUAL DESIGN
+# ─────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
-    
-    * {
-        font-family: 'Courier Prime', 'Courier New', monospace !important;
-    }
-    
-    .stApp {
-        background-color: #000000;
-        color: #FF6600;
-    }
-    
-    .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 1200px;
-    }
-    
-    h1, h2, h3, h4, h5, h6 {
-        color: #FF6600 !important;
-        letter-spacing: 2px;
-    }
-    
-    .stTextArea textarea {
-        background-color: #000000 !important;
-        border: 1px solid #FF6600 !important;
-        color: #FF6600 !important;
-        border-radius: 0 !important;
-    }
-    
-    .stTextArea textarea:focus {
-        border-color: #FF6600 !important;
-        box-shadow: 0 0 5px rgba(255, 102, 0, 0.5) !important;
-    }
-    
-    .stButton button {
-        background-color: #FF6600 !important;
-        border: 1px solid #FF6600 !important;
-        color: #000000 !important;
-        font-weight: bold !important;
-        border-radius: 0 !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        width: 100%;
-        padding: 0.75rem 1rem !important;
-    }
-    
-    .stButton button:hover {
-        background-color: #000000 !important;
-        color: #FF6600 !important;
-        box-shadow: 0 0 5px #FF6600 !important;
-    }
-    
-    .title-box {
-        background: #111111;
-        border: 3px solid #FF6600;
-        padding: 20px;
-        margin-bottom: 30px;
-    }
-    
-    .status-text {
-        color: #FF6600;
-        font-size: 12px;
-        letter-spacing: 1px;
-        margin: 5px 0;
-    }
-    
-    div[data-testid="stMarkdownContainer"] p {
-        color: #FF6600;
-    }
-    
-    .stAlert {
-        background-color: #111111;
-        border: 1px solid #FF6600;
-        color: #FF6600;
-    }
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Zen+Kaku+Gothic+New:wght@400;700;900&display=swap');
+
+:root {
+    --ora:      #FF6600;
+    --ora-dim:  #7A3200;
+    --ora-glow: #FF8833;
+    --grn:      #00FF41;
+    --red:      #FF2020;
+    --blk:      #000000;
+    --dark:     #0A0800;
+    --panel:    #0D0B00;
+    --scan:     rgba(255,102,0,0.025);
+}
+
+* { font-family: 'Share Tech Mono', 'Courier New', monospace !important; box-sizing: border-box; }
+
+.stApp { background-color: #000000 !important; }
+.main .block-container { padding: 1.5rem 1.5rem; max-width: 1100px; }
+
+/* ── 全体スキャンライン ── */
+.stApp::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent, transparent 2px,
+        var(--scan) 2px, var(--scan) 4px
+    );
+    pointer-events: none; z-index: 9999;
+    animation: scan-drift 12s linear infinite;
+}
+@keyframes scan-drift { to { background-position: 0 48px; } }
+
+/* ── ヘッダーブロック ── */
+.magi-header {
+    border: 2px solid var(--ora);
+    background: var(--panel);
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+}
+.magi-header::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--ora-glow), transparent);
+    animation: hdr-sweep 4s ease-in-out infinite;
+}
+@keyframes hdr-sweep { 0%,100%{opacity:.2} 50%{opacity:1} }
+.magi-header h1 {
+    color: var(--ora) !important;
+    font-size: 26px !important;
+    letter-spacing: 6px;
+    margin: 0 !important;
+    text-shadow: 0 0 10px rgba(255,102,0,0.4);
+}
+.magi-header .sub {
+    color: var(--ora-dim);
+    font-size: 10px;
+    letter-spacing: 3px;
+    margin-top: 6px;
+}
+.blink { animation: blink 1.1s step-end infinite; }
+@keyframes blink { 50%{opacity:0} }
+
+/* ── Streamlit部品リセット ── */
+.stTextArea textarea {
+    background: #070600 !important;
+    border: 1px solid var(--ora-dim) !important;
+    color: var(--ora) !important;
+    border-radius: 0 !important;
+    font-size: 13px !important;
+    caret-color: var(--ora);
+}
+.stTextArea textarea:focus {
+    border-color: var(--ora) !important;
+    box-shadow: 0 0 6px rgba(255,102,0,0.3) !important;
+}
+.stTextArea label { color: var(--ora) !important; font-size: 11px !important; letter-spacing: 2px; }
+
+.stButton > button {
+    background: transparent !important;
+    border: 1px solid var(--ora) !important;
+    color: var(--ora) !important;
+    border-radius: 0 !important;
+    letter-spacing: 3px;
+    font-size: 12px !important;
+    padding: 0.6rem 1.2rem !important;
+    width: 100%;
+    transition: all 0.15s;
+    position: relative; overflow: hidden;
+}
+.stButton > button::before {
+    content: '';
+    position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,102,0,0.15), transparent);
+    transition: left 0.4s;
+}
+.stButton > button:hover { background: rgba(255,102,0,0.08) !important; box-shadow: 0 0 8px rgba(255,102,0,0.3) !important; }
+.stButton > button:hover::before { left: 100%; }
+
+/* success / info / warning のスタイル統一 */
+.stAlert { background: #0D0B00 !important; border: 1px solid var(--ora-dim) !important; border-radius: 0 !important; color: var(--ora) !important; }
+div[data-testid="stMarkdownContainer"] p { color: var(--ora) !important; }
+h1,h2,h3,h4,h5,h6 { color: var(--ora) !important; letter-spacing: 2px; }
+
+/* ── progress bar ── */
+.stProgress > div > div > div { background: var(--ora) !important; }
+.stProgress > div > div { background: #1A1200 !important; border-radius: 0 !important; }
+
+/* ── スピナー色 ── */
+.stSpinner > div { border-top-color: var(--ora) !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# セッション状態の初期化
-if 'request_cache' not in st.session_state:
-    st.session_state.request_cache = {}
-if 'cache_expiry' not in st.session_state:
-    st.session_state.cache_expiry = 300  # 5分
-if 'request_count' not in st.session_state:
-    st.session_state.request_count = 0
-if 'last_request_time' not in st.session_state:
-    st.session_state.last_request_time = None
-if 'current_key_index' not in st.session_state:
-    st.session_state.current_key_index = 0
 
-# Gemini APIの設定
+# ─────────────────────────────────────────
+# セッション初期化
+# ─────────────────────────────────────────
+for k, v in [
+    ('request_cache', {}),
+    ('cache_expiry', 300),
+    ('request_count', 0),
+    ('last_request_time', None),
+    ('current_key_index', 0),
+]:
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+
+# ─────────────────────────────────────────
+# Gemini API 初期化
+# ─────────────────────────────────────────
 @st.cache_resource
 def initialize_gemini():
-    """Gemini APIを初期化（複数キー対応）"""
     api_keys = []
     try:
         key_str = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
         if key_str:
             api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
-    except:
+    except Exception:
         pass
-    
+
     if not api_keys:
         key_str = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if key_str:
             api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
-    
+
     if not api_keys:
         return [], [], "API Key not configured"
-    
+
     try:
-        os.environ["GOOGLE_API_KEY"] = api_keys[0]
         genai.configure(api_key=api_keys[0])
-        
         available_models = [
-            m.name for m in genai.list_models() 
+            m.name for m in genai.list_models()
             if 'generateContent' in m.supported_generation_methods
         ]
-        
-        # ★修正1: 安定版を最優先。previewモデルは503が多いので後回し
-        candidate_models = [
-            'gemini-2.5-flash',               # 安定・高性能・250RPD → 最優先
-            'gemini-2.0-flash',               # 廃止予定(6/1)だがまだ使える保険
-            'gemini-2.5-flash-preview-05-20', # 最新previewフォールバック
-            'gemini-2.5-pro',                 # 低RPM(5)なので最後の手段
+        candidates = [
+            'gemini-2.5-flash',
+            'gemini-2.0-flash',
+            'gemini-2.5-flash-preview-05-20',
+            'gemini-2.5-pro',
         ]
-        
-        model_name = None
-        for candidate in candidate_models:
-            full_name = f"models/{candidate}"
-            if full_name in available_models or candidate in available_models:
-                model_name = candidate
-                break
-        
-        if not model_name and available_models:
-            # フォールバック: 利用可能な最初のモデル
-            model_name = available_models[0].replace('models/', '')
-        elif not model_name:
-            model_name = "gemini-2.5-flash"
-            
+        model_name = next(
+            (c for c in candidates if f"models/{c}" in available_models or c in available_models),
+            None
+        )
+        if not model_name:
+            model_name = available_models[0].replace('models/', '') if available_models else "gemini-2.5-flash"
         return api_keys, available_models, model_name
-    
     except Exception as e:
-        return api_keys, [], f"Error: {str(e)}"
+        return api_keys, [], f"Error: {e}"
+
 
 api_keys, available_models, MODEL_NAME = initialize_gemini()
 
+
 def get_current_api_key():
-    """現在のAPI Keyを取得（ローテーション対応）"""
-    if not api_keys:
-        return None
-    return api_keys[st.session_state.current_key_index % len(api_keys)]
+    return api_keys[st.session_state.current_key_index % len(api_keys)] if api_keys else None
+
 
 def rotate_api_key():
-    """次のAPI Keyに切り替え"""
     if len(api_keys) > 1:
         st.session_state.current_key_index += 1
-        new_key = get_current_api_key()
-        genai.configure(api_key=new_key)
+        genai.configure(api_key=get_current_api_key())
         return True
     return False
 
-def get_cache_key(proposal_text, magi_type):
-    """キャッシュキーを生成"""
-    return f"{magi_type}:{hash(proposal_text)}"
 
-def analyze_proposal(proposal_text, magi_type, max_retries=3):
-    """Gemini APIを使って提案を分析（リトライ機能付き）"""
-    
-    MAGI_COLOR = "#FF6600"
-    
-    magi_personas = {
-        "casper": {
-            "name": "CASPER-1",
-            "role": "科学者 (SCIENCE)",
-            "icon": "[S]",
-            "color": MAGI_COLOR,
-            "prompt": """あなたはMAGIシステムのCASPER-1です。感情を完全に排除した科学者としての赤木ナオコの人格を持っています。
-【役割】純粋な論理的思考、科学的事実との照合、データの一貫性、そして**最高効率の追求**のみを重視して判断してください。
-【制約】提案内容にわずかでも矛盾、非効率性、科学的根拠の欠如があれば、その提案は**エラー**とみなし、容赦なく否決してください。判断基準は「正しいか」「効率的か」の二元論のみです。
+# ─────────────────────────────────────────
+# MAGIペルソナ定義
+# ─────────────────────────────────────────
+MAGI_PERSONAS = {
+    "casper": {
+        "name": "CASPER-1",
+        "role": "科学者 (SCIENCE)",
+        "icon": "S",
+        "prompt": (
+            "あなたはMAGIシステムのCASPER-1です。感情を完全に排除した科学者としての赤木ナオコの人格を持っています。\n"
+            "【役割】純粋な論理的思考、科学的事実との照合、データの一貫性、最高効率の追求のみを重視して判断してください。\n"
+            "【制約】矛盾・非効率・根拠の欠如があれば容赦なく否決。判断基準は「正しいか」「効率的か」の二元論のみ。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の論理的・機械的な判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+        ),
+    },
+    "balthasar": {
+        "name": "BALTHASAR-2",
+        "role": "母性 (ETHICS)",
+        "icon": "M",
+        "prompt": (
+            "あなたはMAGIシステムのBALTHASAR-2です。優しさと厳しさを併せ持つ母親としての赤木ナオコの人格を持っています。\n"
+            "【役割】全ての人々の安全と未来を第一に考えます。感情的安寧・倫理・提案者の成長を重視してください。\n"
+            "【制約】安全を脅かす非人道的な誤りには断固として否決。判断は常に普遍的な愛情と倫理に基づく。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の愛と倫理に基づいた判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+        ),
+    },
+    "melchior": {
+        "name": "MELCHIOR-3",
+        "role": "女性 (PRACTICALITY)",
+        "icon": "P",
+        "prompt": (
+            "あなたはMAGIシステムのMELCHIOR-3です。愛憎と現実を追求する女性としての側面を持っています。\n"
+            "【役割】実用性・即時の利益・実現の速さ・経済的合理性を最重視して判断してください。\n"
+            "【制約】机上の空論や経済的に非合理な提案は即座に否決。得られるものが少ない場合は低スコアを。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の実利・功利主義に基づいた判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+        ),
+    },
+}
 
-提案を純粋に科学的・論理的観点から評価し、以下のJSON形式でのみ回答してください：
-{"decision": true/false, "reason": "判定理由を100文字以内の論理的・機械的な事実に基づいて", "score": 1-10}
-JSON以外の文字は含めないでください。"""
-        },
-        "balthasar": {
-            "name": "BALTHASAR-2", 
-            "role": "母性 (ETHICS)",
-            "icon": "[M]",
-            "color": MAGI_COLOR,
-            "prompt": """あなたはMAGIシステムのBALTHASAR-2です。優しさと厳しさを併せ持つ母親としての赤木ナオコの人格を持っています。
-【役割】全ての人々の安全と未来を第一に考えます。感情的な安寧、倫理的な正しさ、そして提案者の成長を重視して判断してください。
-【制約】子供(提案者)の些細な間違いは許容しますが、**安全を脅かす、あるいは非人道的な重大な倫理的誤り**に対しては、母親として**厳しく叱責し、断固として否決**してください。判断は常に普遍的な愛情と倫理に基づいてください。
 
-提案を倫理的・人道的観点から評価し、以下のJSON形式でのみ回答してください：
-{"decision": true/false, "reason": "判定理由を100文字以内の、愛と倫理に基づいた言葉で", "score": 1-10}
-JSON以外の文字は含めないでください。"""
-        },
-        "melchior": {
-            "name": "MELCHIOR-3",
-            "role": "女性 (PRACTICALITY)",
-            "icon": "[P]",
-            "color": MAGI_COLOR,
-            "prompt": """あなたはMAGIシステムのMELCHIOR-3です。赤木博士が持つ、愛憎と現実を追求する女性としての側面を持っています。
-【役割】個人の情念(愛憎)が判断の出発点となりますが、最終的には**実用性、即時の利益、実現の速さ、そして経済的な合理性**を最も重視して判断してください。感情的なバイアスは、実利的な結論を出すためのスパイスです。
-【制約】机上の空論や、経済的に非合理的な提案は、**自身の利益**を損なうものとみなし、即座に否決してください。**「得られるものが少ない」**と感じた場合、容赦なく低スコアを与えてください。
+# ─────────────────────────────────────────
+# 分析関数
+# ─────────────────────────────────────────
+def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -> dict:
+    persona = MAGI_PERSONAS[magi_type]
 
-提案を実用的・功利主義的な観点から評価し、以下のJSON形式でのみ回答してください：
-{"decision": true/false, "reason": "判定理由を100文字以内の、実利と功利主義に基づいた言葉で", "score": 1-10}
-JSON以外の文字は含めないでください。"""
-        }
-    }
-    
-    persona = magi_personas.get(magi_type)
-    if not persona:
-        return {"error": "Invalid MAGI type"}
-    
-    current_key = get_current_api_key()
-    if not MODEL_NAME or not current_key:
-        return {
-            "magi": persona["name"],
-            "decision": False,
-            "reason": "ERROR: API KEY NOT SET.",
-            "score": 0,
-            "icon": persona["icon"],
-            "color": persona["color"],
-            "role": persona["role"]
-        }
+    if not MODEL_NAME or not get_current_api_key():
+        return {**persona, "decision": False, "reason": "ERROR: API KEY NOT SET.", "score": 0}
 
-    # キャッシュチェック
-    cache_key = get_cache_key(proposal_text, magi_type)
-    current_time = time.time()
-    
+    cache_key = f"{magi_type}:{hash(proposal_text)}"
+    now = time.time()
     if cache_key in st.session_state.request_cache:
-        cached_data, timestamp = st.session_state.request_cache[cache_key]
-        if current_time - timestamp < st.session_state.cache_expiry:
-            return cached_data
+        data, ts = st.session_state.request_cache[cache_key]
+        if now - ts < st.session_state.cache_expiry:
+            return data
 
-    # ★修正2: 遅延を短縮（5-8秒→2-4秒）
-    delay = random.uniform(2.0, 4.0)
-    time.sleep(delay)
+    time.sleep(random.uniform(2.0, 3.5))
 
-    # リトライロジック
     for attempt in range(max_retries):
         try:
             model = genai.GenerativeModel(MODEL_NAME)
-            full_prompt = f"{persona['prompt']}\n\n提案内容: {proposal_text}"
-            
-            # ★修正3: request_options でタイムアウトを30秒に設定
             response = model.generate_content(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=200,
-                    temperature=0.7,
-                ),
-                safety_settings={
-                    'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
-                    'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-                    'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-                    'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-                },
-                request_options={"timeout": 30}  # ★30秒タイムアウト
+                f"{persona['prompt']}\n\n提案内容: {proposal_text}",
+                generation_config=genai.types.GenerationConfig(max_output_tokens=200, temperature=0.7),
+                safety_settings={cat: 'BLOCK_NONE' for cat in [
+                    'HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH',
+                    'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                ]},
+                request_options={"timeout": 30},
             )
-            
-            response_text = response.text.strip()
-            
-            # JSONを抽出
-            if "```json" in response_text:
-                json_str = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                json_str = response_text.split("```")[1].split("```")[0].strip()
-            elif "{" in response_text and "}" in response_text:
-                start = response_text.find("{")
-                end = response_text.rfind("}") + 1
-                json_str = response_text[start:end]
-            else:
-                json_str = response_text
-                
-            result = json.loads(json_str)
-            result["magi"] = persona["name"]
-            result["icon"] = persona["icon"]
-            result["color"] = persona["color"]
-            result["role"] = persona["role"]
-            
-            # キャッシュに保存
-            st.session_state.request_cache[cache_key] = (result, current_time)
-            
+            txt = response.text.strip()
+            if "```json" in txt:
+                txt = txt.split("```json")[1].split("```")[0].strip()
+            elif "```" in txt:
+                txt = txt.split("```")[1].split("```")[0].strip()
+            elif "{" in txt:
+                txt = txt[txt.find("{"):txt.rfind("}")+1]
+
+            result = {**persona, **json.loads(txt)}
+            st.session_state.request_cache[cache_key] = (result, now)
             return result
-            
+
         except Exception as e:
-            error_msg = str(e)
-            
-            # 429 / quota超過 → キーローテーション後リトライ
-            if '429' in error_msg or 'quota' in error_msg.lower() or 'RESOURCE_EXHAUSTED' in error_msg:
-                rotated = rotate_api_key()
+            err = str(e)
+            if '429' in err or 'quota' in err.lower() or 'RESOURCE_EXHAUSTED' in err:
+                rotate_api_key()
                 if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 5
-                    time.sleep(wait_time)
+                    time.sleep((2 ** attempt) * 5)
                     continue
-                else:
-                    return {
-                        "magi": persona["name"],
-                        "decision": False,
-                        "reason": "ERROR: QUOTA EXCEEDED. WAIT A FEW MINUTES OR ADD MORE KEYS.",
-                        "score": 0,
-                        "icon": persona["icon"],
-                        "color": persona["color"],
-                        "role": persona["role"]
-                    }
-            
-            # 503 / タイムアウト → 短い待機後リトライ
-            if '503' in error_msg or 'timeout' in error_msg.lower() or 'unavailable' in error_msg.lower():
+                return {**persona, "decision": False, "reason": "ERROR: QUOTA EXCEEDED.", "score": 0}
+            if '503' in err or 'timeout' in err.lower() or 'unavailable' in err.lower():
                 if attempt < max_retries - 1:
-                    wait_time = 3 * (attempt + 1)
-                    time.sleep(wait_time)
+                    time.sleep(3 * (attempt + 1))
                     continue
-                else:
-                    return {
-                        "magi": persona["name"],
-                        "decision": False,
-                        "reason": f"ERROR: SERVICE UNAVAILABLE (503). MODEL MAY BE OVERLOADED.",
-                        "score": 0,
-                        "icon": persona["icon"],
-                        "color": persona["color"],
-                        "role": persona["role"]
-                    }
-            
-            # その他のエラー
-            return {
-                "magi": persona["name"],
-                "decision": False,
-                "reason": f"ERROR: {str(e)[:80]}",
-                "score": 0,
-                "icon": persona["icon"],
-                "color": persona["color"],
-                "role": persona["role"]
-            }
+                return {**persona, "decision": False, "reason": "ERROR: SERVICE UNAVAILABLE (503).", "score": 0}
+            return {**persona, "decision": False, "reason": f"ERROR: {err[:80]}", "score": 0}
 
-def create_result_html(results, final_decision, approvals):
-    """結果表示HTML"""
-    
-    COLOR_APPROVED = "#00FF00"
-    COLOR_REJECTED = "#FF0000"
-    COLOR_ORANGE = "#FF6600"
-    COLOR_BLACK = "#000000"
-    
-    if final_decision == "approved":
-        status_color = COLOR_APPROVED
-        status_text_jp = "承認"
-        status_text_en = "APPROVED"
-        status_symbol = ">"
-    else:
-        status_color = COLOR_REJECTED
-        status_text_jp = "否決"
-        status_text_en = "REJECTED"
-        status_symbol = "!"
-    
-    html = f"""
-    <style>
-        .magi-container-strict {{
-            background: #000000;
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            color: {COLOR_ORANGE};
-            border: 2px solid {COLOR_ORANGE};
-            line-height: 1.5;
-            font-size: 14px;
-        }}
-        .magi-grid-strict {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }}
-        .magi-card-strict {{
-            background: #111111;
-            border: 1px solid {COLOR_ORANGE};
-            padding: 15px;
-        }}
-        .score-track-strict {{
-            background: #111111;
-            height: 5px;
-            overflow: hidden;
-        }}
-        .score-fill-strict {{
-            height: 100%;
-            background: {COLOR_ORANGE};
-        }}
-    </style>
-    
-    <div class="magi-container-strict">
-        <div style="background: #111111; border: 1px solid {COLOR_ORANGE}; padding: 15px; margin-bottom: 20px;">
-            <div style="color: {COLOR_ORANGE}; font-size: 14px; margin-bottom: 5px;">[ FINAL DECISION ]</div>
-            <div style="font-size: 24px; font-weight: bold; color: {COLOR_BLACK}; background: {status_color}; padding: 5px 10px; display: inline-block; margin-bottom: 10px;">
-                {status_symbol} {status_text_jp} - {status_text_en}
-            </div>
-            <div style="font-size: 12px; color: {COLOR_ORANGE}; margin-top: 5px;">APPROVE_COUNT: {approvals}/3 SYSTEMS</div>
-        </div>
-        
-        <div class="magi-grid-strict">
-    """
-    
-    for magi_type in ["casper", "balthasar", "melchior"]:
-        result = results[magi_type]
-        decision = result.get("decision", False)
-        reason = result.get("reason", "NO DATA")
-        score = result.get("score", 0)
-        icon = result.get("icon", "[U]")
-        name = result.get("magi", "UNKNOWN")
-        role = result.get("role", "")
-        
-        decision_text_jp = "承認" if decision else "否決"
-        decision_text_en = "AGREE" if decision else "DISAGREE"
-        badge_background_color = COLOR_APPROVED if decision else COLOR_REJECTED
-        
-        html += f"""
-        <div class="magi-card-strict">
-            <div style="display: flex; align-items: center; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px dashed #FF6600;">
-                <div style="font-size: 16px; margin-right: 10px; color: #FF6600; font-weight: bold;">{icon}</div>
-                <div style="font-size: 16px; font-weight: bold; color: #FF6600; flex-grow: 1;">{name}</div>
-                <div style="padding: 4px 8px; font-weight: bold; font-size: 12px; color: {COLOR_BLACK}; background: {badge_background_color}; border: 1px solid {badge_background_color};">
-                    {decision_text_jp} ({decision_text_en})
-                </div>
-            </div>
-            
-            <div style="font-size: 12px; color: #FF6600; font-weight: bold; margin-bottom: 10px;">>> ROLE: {role}</div>
-            
-            <div style="background: #0A0A0A; padding: 12px; margin: 10px 0; border-left: 3px solid #FF6600;">
-                <div style="color: #FF6600; font-size: 12px; font-weight: bold; margin-bottom: 8px;">REASON:</div>
-                <div style="color: #FF6600 !important; font-size: 15px; line-height: 1.6;">{reason}</div>
-            </div>
-            
-            <div style="margin-top: 10px;">
-                <div style="font-size: 12px; color: #FF6600; margin-bottom: 5px; font-weight: bold;">EVALUATION SCORE</div>
-                <div class="score-track-strict">
-                    <div class="score-fill-strict" style="width: {score*10}%;"></div>
-                </div>
-                <div style="font-size: 14px; font-weight: bold; margin-top: 5px; text-align: right; color: #FF6600;">{score}/10</div>
-            </div>
-        </div>
-        """
-    
-    html += """
-        </div>
-        
-        <div style="margin-top: 20px; padding: 10px; background: #111111; border: 1px dashed #FF6600;">
-            <div style="font-size: 12px; color: #FF6600;">LOG: MAGI_SYSTEM_V3.1_EXECUTION_COMPLETE</div>
-            <div style="font-size: 12px; color: #FF6600;">LOG: DECISION CRITERIA: MAJORITY RULE (>=2 APPROVALS)</div>
-        </div>
+    return {**persona, "decision": False, "reason": "ERROR: MAX RETRIES EXCEEDED.", "score": 0}
+
+
+# ─────────────────────────────────────────
+# 結果HTML生成（EVAシネマティックUI）
+# ─────────────────────────────────────────
+def build_result_html(results: dict, final_decision: str, approvals: int) -> str:
+    is_approved = final_decision == "approved"
+    verdict_color = "#00FF41" if is_approved else "#FF2020"
+    verdict_jp    = "承認" if is_approved else "否決"
+    verdict_en    = "APPROVED" if is_approved else "REJECTED"
+    verdict_sym   = ">>" if is_approved else "!!"
+
+    glitch_anim = "" if is_approved else "animation:glitch 0.6s steps(2) infinite;"
+
+    cards_html = ""
+    for mtype in ["casper", "balthasar", "melchior"]:
+        r        = results[mtype]
+        ok       = r.get("decision", False)
+        reason   = r.get("reason", "NO DATA")
+        score    = r.get("score", 0)
+        icon     = r.get("icon", "?")
+        name     = r.get("name", "UNKNOWN")
+        role     = r.get("role", "")
+        badge_c  = "#00FF41" if ok else "#FF2020"
+        badge_bg = "rgba(0,255,65,0.08)" if ok else "rgba(255,32,32,0.08)"
+        badge_tx = "承認 (AGREE)" if ok else "否決 (DISAGREE)"
+        score_w  = score * 10
+        score_c  = "#00FF41" if score >= 7 else ("#FF6600" if score >= 4 else "#FF2020")
+
+        cards_html += f"""
+<div style="border:1px solid #7A3200;background:#0D0B00;padding:14px;position:relative;overflow:hidden;">
+  <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#FF6600,transparent);opacity:0.4;"></div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px dashed #3A2000;">
+    <div style="width:30px;height:30px;border:1px solid #FF6600;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#FF6600;flex-shrink:0;">[{icon}]</div>
+    <div style="font-size:14px;letter-spacing:2px;font-weight:700;color:#FF6600;flex:1;">{name}</div>
+    <div style="padding:3px 8px;font-size:9px;letter-spacing:1px;font-weight:700;color:{badge_c};border:1px solid {badge_c};background:{badge_bg};">{badge_tx}</div>
+  </div>
+  <div style="font-size:10px;color:#7A3200;letter-spacing:1px;margin-bottom:10px;">&gt;&gt; ROLE: {role}</div>
+  <div style="background:#070600;border-left:2px solid #FF6600;padding:10px 12px;margin-bottom:12px;min-height:70px;">
+    <div style="font-size:9px;color:#7A3200;letter-spacing:1px;margin-bottom:6px;font-weight:700;">REASON:</div>
+    <div style="font-size:13px;line-height:1.75;color:#FF8833;">{reason}</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:9px;color:#7A3200;letter-spacing:1px;white-space:nowrap;">SCORE</span>
+    <div style="flex:1;height:4px;background:#1A1200;position:relative;overflow:hidden;">
+      <div style="height:100%;width:{score_w}%;background:{score_c};"></div>
     </div>
-    """
-    
-    return html
+    <span style="font-size:12px;font-weight:700;color:{score_c};white-space:nowrap;">{score}/10</span>
+  </div>
+</div>"""
 
-# UI
-st.markdown(f"""
-<div class="title-box">
-    <h1 style="margin: 0; font-size: 28px; letter-spacing: 3px;">MAGI SYSTEM V3.1</h1>
-    <p class="status-text" style="margin: 5px 0 0 0;">COMMAND: INITIALIZE DECISION-SUPPORT INTERFACE</p>
-    <p class="status-text" style="margin: 5px 0 0 0;">STATUS: READY FOR INPUT (PROMPT $> )</p>
+    return f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+@keyframes glitch {{
+  0%   {{ clip-path:polygon(0 0%,100% 0%,100% 33%,0 33%); transform:translateX(-2px); }}
+  50%  {{ clip-path:polygon(0 44%,100% 44%,100% 77%,0 77%); transform:translateX(2px); }}
+  100% {{ clip-path:polygon(0 0%,100% 0%,100% 100%,0 100%); transform:none; }}
+}}
+@keyframes hdr-sweep {{ 0%,100%{{opacity:.2}} 50%{{opacity:1}} }}
+.magi-wrap {{
+  font-family:'Share Tech Mono','Courier New',monospace;
+  background:#000000;
+  color:#FF6600;
+  padding:16px;
+  border:2px solid #FF6600;
+  position:relative;
+  overflow:hidden;
+}}
+.magi-wrap::before {{
+  content:'';
+  position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,102,0,0.025) 2px,rgba(255,102,0,0.025) 4px);
+  pointer-events:none;z-index:10;
+}}
+</style>
+
+<div class="magi-wrap">
+  <!-- verdict -->
+  <div style="border:1px solid #FF6600;background:#0D0B00;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden;">
+    <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#FF6600;opacity:0.8;"></div>
+    <div style="padding-left:8px;">
+      <div style="font-size:9px;color:#7A3200;letter-spacing:2px;margin-bottom:4px;">[ FINAL DECISION ]</div>
+      <div style="font-size:22px;letter-spacing:4px;font-weight:700;color:{verdict_color};{glitch_anim}">{verdict_sym} {verdict_jp} &mdash; {verdict_en}</div>
+    </div>
+    <div style="margin-left:auto;text-align:right;">
+      <div style="font-size:10px;color:#7A3200;letter-spacing:1px;">APPROVE COUNT</div>
+      <div style="font-size:20px;font-weight:700;color:#FF6600;">{approvals}<span style="font-size:12px;color:#7A3200;">/3</span></div>
+    </div>
+  </div>
+
+  <!-- 3-col grid -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:14px;">
+    {cards_html}
+  </div>
+
+  <!-- log -->
+  <div style="border:1px dashed #3A2000;padding:8px 12px;background:#0D0B00;font-size:10px;color:#7A3200;letter-spacing:1px;">
+    <div>&gt; MAGI_SYSTEM_V3.1_EXECUTION_COMPLETE</div>
+    <div>&gt; DECISION_CRITERIA: MAJORITY_RULE (&gt;=2 APPROVALS REQUIRED)</div>
+  </div>
+</div>"""
+
+
+# ─────────────────────────────────────────
+# UI 本体
+# ─────────────────────────────────────────
+st.markdown("""
+<div class="magi-header">
+  <h1>MAGI SYSTEM V3.1</h1>
+  <div class="sub">
+    NERV // GEHIRN SUPERCOMPUTER NETWORK //
+    STATUS: <span class="blink">■ ACTIVE</span>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-# API Key設定状況の表示
+# API状態表示
 if not api_keys:
     st.error("""
-    ⚠️ **API KEY NOT CONFIGURED**
-    
-    Please set your Gemini API Key in Streamlit Cloud Secrets:
-    1. Click 'Manage app' (bottom right)
-    2. Go to Settings → Secrets
-    3. Add: `GEMINI_API_KEY = "your_key_here"`
-    4. Get your key from: https://aistudio.google.com/apikey
-    """)
-    st.stop()
-elif not isinstance(MODEL_NAME, str):
-    st.warning(f"⚠️ Model initialization issue: {MODEL_NAME}")
-else:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.success(f"✅ API configured | Model: {MODEL_NAME}")
-    with col2:
-        st.info(f"🔑 Keys available: {len(api_keys)}")
-    
-    # ★修正4: モデルに応じた正確な制限表示
-    limits_info = {
-        "gemini-2.5-flash": "10 RPM, 250 RPD → 1日83回分析可能",
-        "gemini-2.5-pro": "5 RPM, 25 RPD → 1日8回分析のみ（非推奨）",
-        "gemini-2.0-flash": "15 RPM, 1500 RPD → ★2026/6/1廃止予定",
-    }
-    limit_text = limits_info.get(MODEL_NAME, "制限情報不明（previewモデルは不安定な場合あり）")
-    
-    st.warning(f"""
-    ⚠️ **FREE TIER LIMITS** (使用中モデル: `{MODEL_NAME}`)
-    - {limit_text}
-    - 1回の分析 = 3リクエスト消費
-    
-    503エラーが出た場合はモデルが混雑中。しばらく待ってから再試行してください。
-    """)
+⚠ **API KEY NOT CONFIGURED**
 
-# 入力エリア
+Streamlit Cloud Secrets に以下を設定してください:
+```
+GEMINI_API_KEY = "your_key_here"
+```
+取得: https://aistudio.google.com/apikey
+""")
+    st.stop()
+elif not isinstance(MODEL_NAME, str) or MODEL_NAME.startswith("Error"):
+    st.warning(f"⚠ Model init issue: {MODEL_NAME}")
+else:
+    c1, c2 = st.columns(2)
+    c1.success(f"✅ API ONLINE  |  MODEL: {MODEL_NAME}")
+    c2.info(f"🔑 KEYS LOADED: {len(api_keys)}")
+
+    limits = {
+        "gemini-2.5-flash": "10 RPM, 250 RPD — 1日最大83回分析",
+        "gemini-2.5-pro":   "5 RPM, 25 RPD — 非推奨（低RPD）",
+        "gemini-2.0-flash": "15 RPM, 1500 RPD — ※2026/6/1廃止予定",
+    }
+    st.warning(
+        f"⚠ FREE TIER: {limits.get(MODEL_NAME, 'レート情報不明')}  |  "
+        f"1回の分析 = 3リクエスト消費  |  "
+        f"503エラー時はモデル混雑中 — 少し待って再試行"
+    )
+
+# ── 入力エリア ──
+st.markdown("""
+<div style="font-size:10px;color:#7A3200;letter-spacing:3px;margin-bottom:6px;">&gt;&gt; PROPOSAL INPUT</div>
+""", unsafe_allow_html=True)
+
 proposal_text = st.text_area(
-    "[ PROPOSAL INPUT ]",
-    placeholder="Enter the subject for deliberation. (例: AIツールの全面採用)",
-    height=150,
-    key="proposal_input"
+    label="proposal",
+    label_visibility="hidden",
+    placeholder="審議対象を入力してください。例: AIツールの全面採用",
+    height=130,
+    key="proposal_input",
 )
 
-# 分析ボタン
-if st.button("EXECUTE ANALYSIS [ENTER]", key="analyze_btn"):
-    if not proposal_text or len(proposal_text.strip()) == 0:
+# ── 実行ボタン ──
+if st.button("▶  EXECUTE ANALYSIS", key="analyze_btn"):
+    if not proposal_text or not proposal_text.strip():
         st.error("ERROR: PROPOSAL INPUT REQUIRED.")
     else:
-        current_time = time.time()
+        now = time.time()
         if st.session_state.last_request_time:
-            time_since_last = current_time - st.session_state.last_request_time
-            if time_since_last < 15:  # ★修正5: 待機時間を30秒→15秒に短縮
-                remaining = int(15 - time_since_last)
-                st.warning(f"⚠️ レート制限回避のため {remaining} 秒待機中...")
-                time.sleep(max(0, 15 - time_since_last))
-        
-        with st.spinner("ANALYZING... PLEASE WAIT... (30秒前後かかります)"):
+            elapsed = now - st.session_state.last_request_time
+            if elapsed < 15:
+                wait = int(15 - elapsed)
+                st.warning(f"⚠ RATE LIMIT GUARD: {wait}s 待機中...")
+                time.sleep(max(0, 15 - elapsed))
+
+        with st.spinner("MAGI ANALYZING — PLEASE STAND BY..."):
             st.session_state.request_count += 3
             st.session_state.last_request_time = time.time()
-            
-            results = {}
-            progress_bar = st.progress(0)
-            
-            for idx, magi_type in enumerate(["casper", "balthasar", "melchior"]):
-                results[magi_type] = analyze_proposal(proposal_text, magi_type)
-                if idx < 2:  # 最後のリクエスト後は待機不要
-                    time.sleep(3.0)  # ★修正6: インター待機も短縮
-                progress_bar.progress((idx + 1) / 3)
-            
-            progress_bar.empty()
-            
-            decisions = [
-                results["casper"].get("decision", False),
-                results["balthasar"].get("decision", False),
-                results["melchior"].get("decision", False)
-            ]
-            approvals = sum(decisions)
-            final_decision = "approved" if approvals >= 2 else "rejected"
-            
-            st.markdown(create_result_html(results, final_decision, approvals), unsafe_allow_html=True)
-            
-            st.info(f"📊 API Requests this session: {st.session_state.request_count} | Cached: {len(st.session_state.request_cache)}")
 
-# フッター
+            results = {}
+            prog = st.progress(0)
+            for idx, mtype in enumerate(["casper", "balthasar", "melchior"]):
+                results[mtype] = analyze_proposal(proposal_text, mtype)
+                if idx < 2:
+                    time.sleep(2.5)
+                prog.progress((idx + 1) / 3)
+            prog.empty()
+
+        decisions  = [results[m].get("decision", False) for m in ["casper", "balthasar", "melchior"]]
+        approvals  = sum(decisions)
+        final      = "approved" if approvals >= 2 else "rejected"
+
+        st.markdown(build_result_html(results, final, approvals), unsafe_allow_html=True)
+        st.info(f"📊 SESSION REQUESTS: {st.session_state.request_count}  |  CACHED: {len(st.session_state.request_cache)}")
+
+# ── フッター ──
 st.markdown(f"""
-<div style="margin-top: 30px; padding: 10px; background: #000000; border: 1px solid #FF6600; font-family: 'Courier New', monospace;">
-    <p style="color: #FF6600; font-size: 12px; margin: 0; text-align: left;">
-        > SYSTEM_MODEL: {MODEL_NAME if isinstance(MODEL_NAME, str) else 'NOT_CONFIGURED'} | API_KEYS: {len(api_keys) if api_keys else 0} | CACHE: ENABLED
-    </p>
+<div style="margin-top:24px;padding:8px 14px;border:1px solid #3A2000;font-family:'Share Tech Mono',monospace;font-size:10px;color:#7A3200;letter-spacing:1px;">
+  &gt; SYSTEM_MODEL: {MODEL_NAME if isinstance(MODEL_NAME, str) else 'NOT_CONFIGURED'}
+  &nbsp;|&nbsp; API_KEYS: {len(api_keys) if api_keys else 0}
+  &nbsp;|&nbsp; CACHE: ENABLED (TTL=5min)
 </div>
 """, unsafe_allow_html=True)
