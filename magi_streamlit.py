@@ -1,10 +1,13 @@
 import os
-import google.generativeai as genai
 import streamlit as st
 import json
 import time
 import random
 import re
+
+from google import genai
+from google.genai import types
+
 st.set_page_config(
     page_title="MAGI SYSTEM V3.1",
     page_icon="🔶",
@@ -148,7 +151,7 @@ for k, v in [
 
 
 # ─────────────────────────────────────────
-# Gemini API 初期化
+# Gemini API 初期化 (google.genai 新SDK)
 # ─────────────────────────────────────────
 @st.cache_resource
 def initialize_gemini():
@@ -166,32 +169,36 @@ def initialize_gemini():
             api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
 
     if not api_keys:
-        return [], [], "API Key not configured"
+        return [], "API Key not configured"
 
     try:
-        genai.configure(api_key=api_keys[0])
-        available_models = [
-            m.name for m in genai.list_models()
-            if 'generateContent' in m.supported_generation_methods
-        ]
+        client = genai.Client(api_key=api_keys[0])
+        # 利用可能モデルを取得
+        available = [m.name for m in client.models.list()]
+
         candidates = [
-            'gemini-2.0-flash',
-            'gemini-2.5-flash',
             'gemini-2.5-flash-preview-05-20',
+            'gemini-2.5-flash',
             'gemini-2.5-pro',
+            'gemini-2.0-flash',
         ]
         model_name = next(
-            (c for c in candidates if f"models/{c}" in available_models or c in available_models),
+            (c for c in candidates
+             if f"models/{c}" in available or c in available),
             None
         )
         if not model_name:
-            model_name = available_models[0].replace('models/', '') if available_models else "gemini-2.5-flash"
-        return api_keys, available_models, model_name
+            # フォールバック: 最初の generateContent 対応モデル
+            model_name = next(
+                (m.name.replace("models/", "") for m in client.models.list()),
+                "gemini-2.5-flash-preview-05-20"
+            )
+        return api_keys, model_name
     except Exception as e:
-        return api_keys, [], f"Error: {e}"
+        return api_keys, f"Error: {e}"
 
 
-api_keys, available_models, MODEL_NAME = initialize_gemini()
+api_keys, MODEL_NAME = initialize_gemini()
 
 
 def get_current_api_key():
@@ -201,9 +208,13 @@ def get_current_api_key():
 def rotate_api_key():
     if len(api_keys) > 1:
         st.session_state.current_key_index += 1
-        genai.configure(api_key=get_current_api_key())
         return True
     return False
+
+
+def get_client() -> genai.Client:
+    """現在のAPIキーでクライアントを返す"""
+    return genai.Client(api_key=get_current_api_key())
 
 
 # ─────────────────────────────────────────
@@ -253,7 +264,7 @@ MAGI_PERSONAS = {
 
 
 # ─────────────────────────────────────────
-# 分析関数
+# 分析関数 (新SDK対応)
 # ─────────────────────────────────────────
 def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -> dict:
     persona = MAGI_PERSONAS[magi_type]
@@ -272,20 +283,26 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
 
     for attempt in range(max_retries):
         try:
-            model = genai.GenerativeModel(MODEL_NAME)
-            response = model.generate_content(
-                f"{persona['prompt']}\n\n提案内容: {proposal_text}",
-                generation_config=genai.types.GenerationConfig(max_output_tokens=1024, temperature=0.7),
-                safety_settings={cat: 'BLOCK_NONE' for cat in [
-                    'HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH',
-                    'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT',
-                ]},
-                request_options={"timeout": 60},
-                stream=False,
+            client = get_client()
+            response = client.models.generate_content(
+                model=MODEL_NAME,
+                contents=f"{persona['prompt']}\n\n提案内容: {proposal_text}",
+                config=types.GenerateContentConfig(
+                    max_output_tokens=1024,
+                    temperature=0.7,
+                    safety_settings=[
+                        types.SafetySetting(category=cat, threshold="OFF")
+                        for cat in [
+                            "HARM_CATEGORY_HARASSMENT",
+                            "HARM_CATEGORY_HATE_SPEECH",
+                            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        ]
+                    ],
+                ),
             )
-            for part in response.parts:
-                txt += part.text
-            txt = txt.strip()
+
+            txt = response.text.strip() if response.text else ""
 
             # JSONブロック抽出
             if "```json" in txt:
@@ -332,6 +349,7 @@ def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -
                     continue
                 return {**persona, "decision": False, "reason": "ERROR: SERVICE UNAVAILABLE (503).", "score": 0}
             return {**persona, "decision": False, "reason": f"ERROR: {err[:80]}", "score": 0}
+
 
 # ─────────────────────────────────────────
 # 結果HTML生成（EVAシネマティックUI）
@@ -468,6 +486,7 @@ else:
     c2.info(f"🔑 KEYS LOADED: {len(api_keys)}")
 
     limits = {
+        "gemini-2.5-flash-preview-05-20": "10 RPM, 500 RPD — 推奨モデル",
         "gemini-2.5-flash": "10 RPM, 250 RPD — 1日最大83回分析",
         "gemini-2.5-pro":   "5 RPM, 25 RPD — 非推奨（低RPD）",
         "gemini-2.0-flash": "15 RPM, 1500 RPD — ※2026/6/1廃止予定",
