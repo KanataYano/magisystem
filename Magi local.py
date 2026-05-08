@@ -1,16 +1,22 @@
+import os
 import streamlit as st
-import random
+import json
 import time
+import random
+import re
+
+from google import genai
+from google.genai import types
 
 st.set_page_config(
-    page_title="MAGI SYSTEM V3.1 [LOCAL]",
+    page_title="MAGI SYSTEM V3.1",
     page_icon="🔶",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="collapsed"
 )
 
 # ─────────────────────────────────────────
-# GLOBAL CSS
+# GLOBAL CSS / EVA VISUAL DESIGN
 # ─────────────────────────────────────────
 st.markdown("""
 <style>
@@ -33,6 +39,7 @@ st.markdown("""
 .stApp { background-color: #000000 !important; }
 .main .block-container { padding: 1.5rem 1.5rem; max-width: 1100px; }
 
+/* ── 全体スキャンライン ── */
 .stApp::before {
     content: '';
     position: fixed; inset: 0;
@@ -46,6 +53,7 @@ st.markdown("""
 }
 @keyframes scan-drift { to { background-position: 0 48px; } }
 
+/* ── ヘッダーブロック ── */
 .magi-header {
     border: 2px solid var(--ora);
     background: var(--panel);
@@ -77,6 +85,7 @@ st.markdown("""
 .blink { animation: blink 1.1s step-end infinite; }
 @keyframes blink { 50%{opacity:0} }
 
+/* ── Streamlit部品リセット ── */
 .stTextArea textarea {
     background: #070600 !important;
     border: 1px solid var(--ora-dim) !important;
@@ -103,150 +112,252 @@ st.markdown("""
     transition: all 0.15s;
     position: relative; overflow: hidden;
 }
-.stButton > button:hover {
-    background: rgba(255,102,0,0.08) !important;
-    box-shadow: 0 0 8px rgba(255,102,0,0.3) !important;
+.stButton > button::before {
+    content: '';
+    position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,102,0,0.15), transparent);
+    transition: left 0.4s;
 }
+.stButton > button:hover { background: rgba(255,102,0,0.08) !important; box-shadow: 0 0 8px rgba(255,102,0,0.3) !important; }
+.stButton > button:hover::before { left: 100%; }
 
-.stAlert {
-    background: #0D0B00 !important;
-    border: 1px solid var(--ora-dim) !important;
-    border-radius: 0 !important;
-    color: var(--ora) !important;
-}
+/* success / info / warning のスタイル統一 */
+.stAlert { background: #0D0B00 !important; border: 1px solid var(--ora-dim) !important; border-radius: 0 !important; color: var(--ora) !important; }
 div[data-testid="stMarkdownContainer"] p { color: var(--ora) !important; }
 h1,h2,h3,h4,h5,h6 { color: var(--ora) !important; letter-spacing: 2px; }
 
+/* ── progress bar ── */
 .stProgress > div > div > div { background: var(--ora) !important; }
 .stProgress > div > div { background: #1A1200 !important; border-radius: 0 !important; }
+
+/* ── スピナー色 ── */
 .stSpinner > div { border-top-color: var(--ora) !important; }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────
-# キーワード辞書
+# セッション初期化
 # ─────────────────────────────────────────
-POSITIVE_KEYWORDS = [
-    "効率", "改善", "安全", "利益", "成長", "革新", "最適", "向上", "推進", "促進",
-    "発展", "強化", "拡大", "節約", "合理", "生産", "価値", "貢献", "支援", "協力",
-    "戦略", "計画", "実装", "導入", "活用", "解決", "達成", "成功", "明確", "確実",
-]
+for k, v in [
+    ('request_cache', {}),
+    ('cache_expiry', 300),
+    ('request_count', 0),
+    ('last_request_time', None),
+    ('current_key_index', 0),
+]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-NEGATIVE_KEYWORDS = [
-    "危険", "リスク", "問題", "失敗", "損失", "削減", "廃止", "停止", "中断", "違反",
-    "不正", "禁止", "困難", "不安", "懸念", "障害", "欠陥", "矛盾", "非効率", "無駄",
-    "コスト", "負担", "複雑", "不明", "曖昧", "遅延", "過剰", "不足", "限界", "破綻",
-]
 
 # ─────────────────────────────────────────
-# ペルソナ別理由テンプレート
+# Gemini API 初期化 (google.genai 新SDK)
 # ─────────────────────────────────────────
-TEMPLATES = {
+@st.cache_resource
+def initialize_gemini():
+    api_keys = []
+    try:
+        key_str = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
+        if key_str:
+            api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
+    except Exception:
+        pass
+
+    if not api_keys:
+        key_str = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if key_str:
+            api_keys = [k.strip() for k in key_str.split(",") if k.strip()]
+
+    if not api_keys:
+        return [], "API Key not configured"
+
+    try:
+        client = genai.Client(api_key=api_keys[0])
+        # 利用可能モデルを取得
+        available = [m.name for m in client.models.list()]
+
+        candidates = [
+            'gemini-2.5-flash-preview-05-20',
+            'gemini-2.5-flash',
+            'gemini-2.5-pro',
+            'gemini-2.0-flash',
+        ]
+        model_name = next(
+            (c for c in candidates
+             if f"models/{c}" in available or c in available),
+            None
+        )
+        if not model_name:
+            # フォールバック: 最初の generateContent 対応モデル
+            model_name = next(
+                (m.name.replace("models/", "") for m in client.models.list()),
+                "gemini-2.5-flash-preview-05-20"
+            )
+        return api_keys, model_name
+    except Exception as e:
+        return api_keys, f"Error: {e}"
+
+
+api_keys, MODEL_NAME = initialize_gemini()
+
+
+def get_current_api_key():
+    return api_keys[st.session_state.current_key_index % len(api_keys)] if api_keys else None
+
+
+def rotate_api_key():
+    if len(api_keys) > 1:
+        st.session_state.current_key_index += 1
+        return True
+    return False
+
+
+def get_client() -> genai.Client:
+    """現在のAPIキーでクライアントを返す"""
+    return genai.Client(api_key=get_current_api_key())
+
+
+# ─────────────────────────────────────────
+# MAGIペルソナ定義
+# ─────────────────────────────────────────
+MAGI_PERSONAS = {
     "casper": {
-        True: [
-            "データの一貫性を確認。論理的矛盾なし。効率係数は許容範囲内。承認を推奨する。",
-            "科学的見地から分析完了。仮説は検証可能であり、実装コストは最小化されている。",
-            "演算結果：提案の有効性は統計的に有意。誤差範囲内での承認を支持する。",
-            "システム解析完了。提案の構造は論理的整合性を保持。推進を是とする。",
-            "データポイントを照合。ノイズを除去した結果、提案は最適解に近似している。",
-        ],
-        False: [
-            "論理的矛盾を検出。根拠データの欠如により否決。再設計を要求する。",
-            "科学的検証不能。仮定が多すぎる。エビデンスの提示なく承認は不可能だ。",
-            "演算結果：リスク係数が閾値を超過。統計的有意性なし。否決が最適解。",
-            "システムエラー：提案の論理構造に欠陥あり。効率性の観点から承認できない。",
-            "データ不整合を確認。前提条件が成立していない。論理的に受理不可能だ。",
-        ],
+        "name": "CASPER-1",
+        "role": "科学者 (SCIENCE)",
+        "icon": "S",
+        "prompt": (
+            "あなたはMAGIシステムのCASPER-1です。感情を完全に排除した科学者としての赤木ナオコの人格を持っています。\n"
+            "【役割】純粋な論理的思考、科学的事実との照合、データの一貫性、最高効率の追求のみを重視して判断してください。\n"
+            "【制約】矛盾・非効率・根拠の欠如があれば容赦なく否決。判断基準は「正しいか」「効率的か」の二元論のみ。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の論理的・機械的な判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
+        ),
     },
     "balthasar": {
-        True: [
-            "人々の安全と幸福を最優先に考えた結果、この提案は未来への希望となりうる。承認する。",
-            "倫理的観点から精査した。この提案は人間の尊厳を守り、社会に貢献するものだ。",
-            "愛情と責任の目で見た。提案は傷つく者を生まず、多くの人を救う可能性がある。",
-            "母として、この提案が次世代に残すものを考えた。価値があると判断する。承認。",
-            "人の心に寄り添う提案だ。倫理的問題なし。未来のために推進を支持する。",
-        ],
-        False: [
-            "人への影響を慎重に検討した。この提案は誰かを傷つける可能性がある。否決する。",
-            "倫理的に受け入れられない。弱者への配慮が欠如している。母として断固反対する。",
-            "愛情の目で見ても、この提案には危険な側面がある。安全が確保されるまで否決。",
-            "未来の子供たちのことを考えた。この道は間違っている。人道的観点から否決する。",
-            "誰かの涙につながる可能性がある提案を承認することはできない。再考を求める。",
-        ],
+        "name": "BALTHASAR-2",
+        "role": "母性 (ETHICS)",
+        "icon": "M",
+        "prompt": (
+            "あなたはMAGIシステムのBALTHASAR-2です。優しさと厳しさを併せ持つ母親としての赤木ナオコの人格を持っています。\n"
+            "【役割】全ての人々の安全と未来を第一に考えます。感情的安寧・倫理・提案者の成長を重視してください。\n"
+            "【制約】安全を脅かす非人道的な誤りには断固として否決。判断は常に普遍的な愛情と倫理に基づく。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の愛と倫理に基づいた判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
+        ),
     },
     "melchior": {
-        True: [
-            "費用対効果を算出。投資回収期間は短く、即時の利益が見込める。承認が合理的だ。",
-            "実用性を最重視した評価を実施。この提案は現実的かつ速やかに実行可能だ。",
-            "経済合理性あり。市場への影響は正であり、利益の最大化に貢献する提案だ。",
-            "実利の観点から分析完了。コストを上回るリターンが期待できる。推進を支持する。",
-            "スピードと効率を重視した結果、この提案は即効性が高い。実行に移すべきだ。",
-        ],
-        False: [
-            "費用対効果が低すぎる。投資に見合うリターンが見込めない。即座に否決する。",
-            "実用性なし。机上の空論に過ぎない。現実の利益につながらない提案は不要だ。",
-            "経済的損失リスクが高い。このまま進めば損失が拡大する。実利的に否決する。",
-            "スピードが遅すぎる。実現までのコストが膨大だ。もっと効率的な方法があるはずだ。",
-            "得られるものが少なすぎる。リソースの無駄遣いだ。功利主義的観点から否決する。",
-        ],
+        "name": "MELCHIOR-3",
+        "role": "女性 (PRACTICALITY)",
+        "icon": "P",
+        "prompt": (
+            "あなたはMAGIシステムのMELCHIOR-3です。愛憎と現実を追求する女性としての側面を持っています。\n"
+            "【役割】実用性・即時の利益・実現の速さ・経済的合理性を最重視して判断してください。\n"
+            "【制約】机上の空論や経済的に非合理な提案は即座に否決。得られるものが少ない場合は低スコアを。\n"
+            '以下のJSON形式でのみ回答: {"decision": true/false, "reason": "100文字以内の実利・功利主義に基づいた判定理由", "score": 1-10}\n'
+            "JSON以外の文字を含めないこと。"
+            '必ず以下のフォーマットのみで回答せよ（前後に文字を付けるな）:\n{"decision": true, "reason": "理由", "score": 5}'
+        ),
     },
 }
 
 
 # ─────────────────────────────────────────
-# ローカル判定エンジン
+# 分析関数 (新SDK対応)
 # ─────────────────────────────────────────
-def compute_base_score(text: str) -> float:
-    """キーワード重み付けでベーススコアを算出（0.0〜1.0）"""
-    text_lower = text.lower()
-    pos = sum(1 for kw in POSITIVE_KEYWORDS if kw in text_lower)
-    neg = sum(1 for kw in NEGATIVE_KEYWORDS if kw in text_lower)
-    length_bonus = min(len(text) / 200, 1.0) * 0.5
-    total = pos - neg * 1.5 + length_bonus
-    normalized = (total + 5) / 10
-    return max(0.0, min(1.0, normalized))
+def analyze_proposal(proposal_text: str, magi_type: str, max_retries: int = 3) -> dict:
+    persona = MAGI_PERSONAS[magi_type]
 
+    if not MODEL_NAME or not get_current_api_key():
+        return {**persona, "decision": False, "reason": "ERROR: API KEY NOT SET.", "score": 0}
 
-def analyze_local(proposal_text: str, magi_type: str) -> dict:
-    base = compute_base_score(proposal_text)
+    cache_key = f"{magi_type}:{hash(proposal_text)}"
+    now = time.time()
+    if cache_key in st.session_state.request_cache:
+        data, ts = st.session_state.request_cache[cache_key]
+        if now - ts < st.session_state.cache_expiry:
+            return data
 
-    # ペルソナ別バイアス
-    bias = {
-        "casper":    0.0,   # 中立（論理）
-        "balthasar": 0.05,  # 少し承認よりり（優しさ）
-        "melchior":  -0.05, # 少し否決より（厳しい実利）
-    }
+    time.sleep(random.uniform(2.0, 3.5))
 
-    score_float = base + bias[magi_type] + random.uniform(-0.15, 0.15)
-    score_float = max(0.0, min(1.0, score_float))
+    for attempt in range(max_retries):
+        try:
+            client = get_client()
+            response = client.models.generate_content(
+                model=MODEL_NAME,
+                contents=f"{persona['prompt']}\n\n提案内容: {proposal_text}",
+                config=types.GenerateContentConfig(
+                    max_output_tokens=512,
+                    temperature=0.7,
+                    safety_settings=[
+                        types.SafetySetting(category=cat, threshold="OFF")
+                        for cat in [
+                            "HARM_CATEGORY_HARASSMENT",
+                            "HARM_CATEGORY_HATE_SPEECH",
+                            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        ]
+                    ],
+                ),
+            )
 
-    # 閾値で決定（ペルソナ別）
-    threshold = {"casper": 0.5, "balthasar": 0.45, "melchior": 0.55}
-    decision = score_float >= threshold[magi_type]
+            txt = response.text.strip() if response.text else ""
 
-    # スコア（1〜10）にランダムブレ付き
-    score_int = int(score_float * 10)
-    score_int = max(1, min(10, score_int + random.randint(-1, 1)))
+            # JSONブロック抽出
+            if "```json" in txt:
+                txt = txt.split("```json")[1].split("```")[0].strip()
+            elif "```" in txt:
+                txt = txt.split("```")[1].split("```")[0].strip()
 
-    reason = random.choice(TEMPLATES[magi_type][decision])
+            # { } の範囲を確実に抽出
+            if "{" in txt:
+                start = txt.find("{")
+                end   = txt.rfind("}")
+                if end != -1:
+                    txt = txt[start:end+1]
+                else:
+                    # 途中切断対策: 閉じ括弧を補完
+                    txt = txt[start:].rstrip().rstrip(",") + '"}'
 
-    persona_meta = {
-        "casper":    {"name": "CASPER-1",    "role": "科学者 (SCIENCE)",       "icon": "S"},
-        "balthasar": {"name": "BALTHASAR-2", "role": "母性 (ETHICS)",           "icon": "M"},
-        "melchior":  {"name": "MELCHIOR-3",  "role": "女性 (PRACTICALITY)",     "icon": "P"},
-    }
+            # 末尾カンマを除去（不正JSON対策）
+            txt = re.sub(r',\s*([}\]])', r'\1', txt)
 
-    return {
-        **persona_meta[magi_type],
-        "decision": decision,
-        "reason":   reason,
-        "score":    score_int,
-    }
+            try:
+                parsed = json.loads(txt)
+            except json.JSONDecodeError:
+                # フォールバック：正規表現で手動抽出（途中切断でも対応）
+                decision_match = re.search(r'"decision"\s*:\s*(true|false)', txt, re.IGNORECASE)
+                reason_match   = re.search(r'"reason"\s*:\s*"([^"]{1,200})', txt)
+                score_match    = re.search(r'"score"\s*:\s*(\d+)', txt)
+                parsed = {
+                    "decision": decision_match.group(1).lower() == "true" if decision_match else False,
+                    "reason":   (reason_match.group(1)[:100] + "…") if reason_match else "PARSE_ERROR",
+                    "score":    int(score_match.group(1)) if score_match else 0,
+                }
+
+            result = {**persona, **parsed}
+            st.session_state.request_cache[cache_key] = (result, now)
+            return result
+
+        except Exception as e:
+            err = str(e)
+            if '429' in err or 'quota' in err.lower() or 'RESOURCE_EXHAUSTED' in err:
+                rotate_api_key()
+                if attempt < max_retries - 1:
+                    time.sleep((2 ** attempt) * 5)
+                    continue
+                return {**persona, "decision": False, "reason": "ERROR: QUOTA EXCEEDED.", "score": 0}
+            if '503' in err or 'timeout' in err.lower() or 'unavailable' in err.lower():
+                if attempt < max_retries - 1:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                return {**persona, "decision": False, "reason": "ERROR: SERVICE UNAVAILABLE (503).", "score": 0}
+            return {**persona, "decision": False, "reason": f"ERROR: {err[:80]}", "score": 0}
 
 
 # ─────────────────────────────────────────
-# 結果HTML生成
+# 結果HTML生成（EVAシネマティックUI）
 # ─────────────────────────────────────────
 def build_result_html(results: dict, final_decision: str, approvals: int) -> str:
     is_approved = final_decision == "approved"
@@ -254,17 +365,18 @@ def build_result_html(results: dict, final_decision: str, approvals: int) -> str
     verdict_jp    = "承認" if is_approved else "否決"
     verdict_en    = "APPROVED" if is_approved else "REJECTED"
     verdict_sym   = ">>" if is_approved else "!!"
-    glitch_anim   = "" if is_approved else "animation:glitch 0.6s steps(2) infinite;"
+
+    glitch_anim = "" if is_approved else "animation:glitch 0.6s steps(2) infinite;"
 
     cards_html = ""
     for mtype in ["casper", "balthasar", "melchior"]:
-        r       = results[mtype]
-        ok      = r.get("decision", False)
-        reason  = r.get("reason", "NO DATA")
-        score   = r.get("score", 0)
-        icon    = r.get("icon", "?")
-        name    = r.get("name", "UNKNOWN")
-        role    = r.get("role", "")
+        r        = results[mtype]
+        ok       = r.get("decision", False)
+        reason   = r.get("reason", "NO DATA")
+        score    = r.get("score", 0)
+        icon     = r.get("icon", "?")
+        name     = r.get("name", "UNKNOWN")
+        role     = r.get("role", "")
         badge_c  = "#00FF41" if ok else "#FF2020"
         badge_bg = "rgba(0,255,65,0.08)" if ok else "rgba(255,32,32,0.08)"
         badge_tx = "承認 (AGREE)" if ok else "否決 (DISAGREE)"
@@ -301,6 +413,7 @@ def build_result_html(results: dict, final_decision: str, approvals: int) -> str
   50%  {{ clip-path:polygon(0 44%,100% 44%,100% 77%,0 77%); transform:translateX(2px); }}
   100% {{ clip-path:polygon(0 0%,100% 0%,100% 100%,0 100%); transform:none; }}
 }}
+@keyframes hdr-sweep {{ 0%,100%{{opacity:.2}} 50%{{opacity:1}} }}
 .magi-wrap {{
   font-family:'Share Tech Mono','Courier New',monospace;
   background:#000000;
@@ -319,6 +432,7 @@ def build_result_html(results: dict, final_decision: str, approvals: int) -> str
 </style>
 
 <div class="magi-wrap">
+  <!-- verdict -->
   <div style="border:1px solid #FF6600;background:#0D0B00;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden;">
     <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#FF6600;opacity:0.8;"></div>
     <div style="padding-left:8px;">
@@ -331,13 +445,14 @@ def build_result_html(results: dict, final_decision: str, approvals: int) -> str
     </div>
   </div>
 
+  <!-- 3-col grid -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:14px;">
     {cards_html}
   </div>
 
+  <!-- log -->
   <div style="border:1px dashed #3A2000;padding:8px 12px;background:#0D0B00;font-size:10px;color:#7A3200;letter-spacing:1px;">
-    <div>&gt; MAGI_SYSTEM_V3.1_LOCAL_MODE_EXECUTION_COMPLETE</div>
-    <div>&gt; ENGINE: RULE_BASED + WEIGHTED_RANDOM (NO API)</div>
+    <div>&gt; MAGI_SYSTEM_V3.1_EXECUTION_COMPLETE</div>
     <div>&gt; DECISION_CRITERIA: MAJORITY_RULE (&gt;=2 APPROVALS REQUIRED)</div>
   </div>
 </div>"""
@@ -351,14 +466,43 @@ st.markdown("""
   <h1>MAGI SYSTEM V3.1</h1>
   <div class="sub">
     NERV // GEHIRN SUPERCOMPUTER NETWORK //
-    MODE: <span style="color:#00FF41;">■ LOCAL [NO API]</span> &nbsp;|&nbsp;
     STATUS: <span class="blink">■ ACTIVE</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-st.info("🖥 LOCAL MODE: APIキー不要。ルールベース＋加重ランダムエンジンで動作中。")
+# API状態表示
+if not api_keys:
+    st.error("""
+⚠ **API KEY NOT CONFIGURED**
 
+Streamlit Cloud Secrets に以下を設定してください:
+```
+GEMINI_API_KEY = "your_key_here"
+```
+取得: https://aistudio.google.com/apikey
+""")
+    st.stop()
+elif not isinstance(MODEL_NAME, str) or MODEL_NAME.startswith("Error"):
+    st.warning(f"⚠ Model init issue: {MODEL_NAME}")
+else:
+    c1, c2 = st.columns(2)
+    c1.success(f"✅ API ONLINE  |  MODEL: {MODEL_NAME}")
+    c2.info(f"🔑 KEYS LOADED: {len(api_keys)}")
+
+    limits = {
+        "gemini-2.5-flash-preview-05-20": "10 RPM, 500 RPD — 推奨モデル",
+        "gemini-2.5-flash": "10 RPM, 250 RPD — 1日最大83回分析",
+        "gemini-2.5-pro":   "5 RPM, 25 RPD — 非推奨（低RPD）",
+        "gemini-2.0-flash": "15 RPM, 1500 RPD — ※2026/6/1廃止予定",
+    }
+    st.warning(
+        f"⚠ FREE TIER: {limits.get(MODEL_NAME, 'レート情報不明')}  |  "
+        f"1回の分析 = 3リクエスト消費  |  "
+        f"503エラー時はモデル混雑中 — 少し待って再試行"
+    )
+
+# ── 入力エリア ──
 st.markdown("""
 <div style="font-size:10px;color:#7A3200;letter-spacing:3px;margin-bottom:6px;">&gt;&gt; PROPOSAL INPUT</div>
 """, unsafe_allow_html=True)
@@ -371,29 +515,44 @@ proposal_text = st.text_area(
     key="proposal_input",
 )
 
+# ── 実行ボタン ──
 if st.button("▶  EXECUTE ANALYSIS", key="analyze_btn"):
     if not proposal_text or not proposal_text.strip():
         st.error("ERROR: PROPOSAL INPUT REQUIRED.")
     else:
+        now = time.time()
+        if st.session_state.last_request_time:
+            elapsed = now - st.session_state.last_request_time
+            if elapsed < 15:
+                wait = int(15 - elapsed)
+                st.warning(f"⚠ RATE LIMIT GUARD: {wait}s 待機中...")
+                time.sleep(max(0, 15 - elapsed))
+
         with st.spinner("MAGI ANALYZING — PLEASE STAND BY..."):
+            st.session_state.request_count += 3
+            st.session_state.last_request_time = time.time()
+
             results = {}
             prog = st.progress(0)
             for idx, mtype in enumerate(["casper", "balthasar", "melchior"]):
-                time.sleep(0.8)  # 演出用ウェイト
-                results[mtype] = analyze_local(proposal_text, mtype)
+                results[mtype] = analyze_proposal(proposal_text, mtype)
+                if idx < 2:
+                    time.sleep(2.5)
                 prog.progress((idx + 1) / 3)
             prog.empty()
 
-        decisions = [results[m].get("decision", False) for m in ["casper", "balthasar", "melchior"]]
-        approvals = sum(decisions)
-        final     = "approved" if approvals >= 2 else "rejected"
+        decisions  = [results[m].get("decision", False) for m in ["casper", "balthasar", "melchior"]]
+        approvals  = sum(decisions)
+        final      = "approved" if approvals >= 2 else "rejected"
 
         st.markdown(build_result_html(results, final, approvals), unsafe_allow_html=True)
+        st.info(f"📊 SESSION REQUESTS: {st.session_state.request_count}  |  CACHED: {len(st.session_state.request_cache)}")
 
-st.markdown("""
-<div style="margin-top:24px;padding:8px 14px;border:1px solid #3A2000;font-size:10px;color:#7A3200;letter-spacing:1px;">
-  &gt; ENGINE: LOCAL_RULE_BASED_V1.0
-  &nbsp;|&nbsp; API: NOT_REQUIRED
-  &nbsp;|&nbsp; KEYWORDS: WEIGHTED_ANALYSIS
+# ── フッター ──
+st.markdown(f"""
+<div style="margin-top:24px;padding:8px 14px;border:1px solid #3A2000;font-family:'Share Tech Mono',monospace;font-size:10px;color:#7A3200;letter-spacing:1px;">
+  &gt; SYSTEM_MODEL: {MODEL_NAME if isinstance(MODEL_NAME, str) else 'NOT_CONFIGURED'}
+  &nbsp;|&nbsp; API_KEYS: {len(api_keys) if api_keys else 0}
+  &nbsp;|&nbsp; CACHE: ENABLED (TTL=5min)
 </div>
 """, unsafe_allow_html=True)
